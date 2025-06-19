@@ -4,7 +4,7 @@ const bot = mineflayer.createBot({
   host: 'Prueba-8qyM.aternos.me',
   port: 23001,
   username: 'Bot24_7',
-  version: '1.21.0'
+  version: '1.20.1' // ✅ Versión compatible
 });
 
 bot.on('spawn', () => {
@@ -37,3 +37,4 @@ bot.on('end', () => {
     process.exit();
   }, 5000);
 });
+       
