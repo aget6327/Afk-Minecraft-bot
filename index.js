@@ -21,26 +21,32 @@ function enviarLogDiscordEmbed(titulo, descripcion, color = 0x57F287) {
 
 let bot;
 let ultimoTick = null;
+let servidorCaido = false;
+let reintento46Minutos = null;
 
 function crearBot() {
   bot = mineflayer.createBot({
     host: 'Prueba-8qyM.aternos.me',
     port: 23001,
-    username: 'Agent_24_7', // ✅ Nombre válido para Geyser/Floodgate
-    auth: 'offline',         // ✅ No premium/Mojang login
-    version: '1.20.1'        // Ajusta según tu servidor
+    username: 'Agent_24_7',
+    auth: 'offline',
+    version: '1.20.1'
   });
 
   bot.on('spawn', () => {
-    console.log('✅ Bot conectado al servidor Minecraft');
-    enviarLogDiscordEmbed('✅ Bot Conectado', 'El bot se conectó correctamente al servidor.');
+    console.log('✅ Bot conectado');
+    enviarLogDiscordEmbed('✅ Bot Conectado', 'Se ha conectado al servidor correctamente.');
     ultimoTick = bot.time.age;
+    servidorCaido = false;
 
-    // Enviar /register o /login si se requiere
-    bot.chat('/register 123456 123456'); // solo la 1ra vez si el server lo pide
-    bot.chat('/login 123456');           // para siguientes veces
+    if (reintento46Minutos) {
+      clearTimeout(reintento46Minutos);
+      reintento46Minutos = null;
+    }
 
-    // Movimiento antiafk
+    bot.chat('/register 123456 123456');
+    bot.chat('/login 123456');
+
     const acciones = ['forward', 'back', 'left', 'right'];
     setInterval(() => {
       const accion = acciones[Math.floor(Math.random() * acciones.length)];
@@ -52,23 +58,20 @@ function crearBot() {
       }, 1000);
     }, 60 * 1000);
 
-    // Cámara como jugador real
     setInterval(() => {
       const yaw = Math.random() * Math.PI * 2;
       const pitch = (Math.random() - 0.5) * Math.PI / 3;
       bot.look(yaw, pitch, true);
     }, 45000);
 
-    // Mensaje al chat
     setInterval(() => {
       bot.chat('✅ Bot activo 24/7');
     }, 10 * 60 * 1000);
 
-    // Verificación de congelamiento
     setInterval(() => {
       if (!bot || !bot.time || bot.time.age === ultimoTick) {
         console.log('🧊 Bot congelado. Reiniciando...');
-        enviarLogDiscordEmbed('🧊 Bot congelado', 'Reiniciando...', 0xED4245);
+        enviarLogDiscordEmbed('🧊 Bot congelado', 'Reiniciando proceso...', 0xED4245);
         process.exit();
       }
       ultimoTick = bot.time.age;
@@ -92,28 +95,29 @@ function crearBot() {
 
   bot.on('error', (err) => {
     console.log('❌ Error:', err.message);
-    if (err.code === 'ECONNREFUSED' || err.message.includes('Timed out')) {
-      enviarLogDiscordEmbed('🔌 Servidor no disponible', 'El bot no pudo conectarse.', 0xED4245);
+    if (!servidorCaido && (err.code === 'ECONNREFUSED' || err.message.includes('Timed out'))) {
+      servidorCaido = true;
+      console.log('📴 Servidor posiblemente apagado');
+      enviarLogDiscordEmbed('📴 Servidor caído', 'El servidor no responde. Esperando 46 minutos...', 0xED4245);
+
+      reintento46Minutos = setTimeout(() => {
+        console.log('⏳ 46 minutos pasaron. Intentando reconectar...');
+        enviarLogDiscordEmbed('⏳ Intentando activar servidor', 'Han pasado 46 minutos. Reintentando conexión...', 0xFEE75C);
+        crearBot(); // intenta conectar de nuevo
+      }, 46 * 60 * 1000); // 46 minutos
     } else {
       enviarLogDiscordEmbed('❌ Error', `Mensaje: ${err.message}`, 0xED4245);
     }
   });
 
   bot.on('end', () => {
-    console.log('🔁 Bot desconectado. Reintentando...');
-    enviarLogDiscordEmbed('🔁 Bot desconectado', 'Reintentando en 10 segundos...', 0xFEE75C);
-    esperarYReconectar();
+    console.log('🔁 Desconectado. Intentando reconectar...');
+    enviarLogDiscordEmbed('🔁 Bot desconectado', 'Intentando reconectar en 10 segundos...', 0xFEE75C);
+    setTimeout(crearBot, 10000);
   });
 }
 
-function esperarYReconectar() {
-  setTimeout(() => {
-    console.log('⏳ Reintentando conexión...');
-    crearBot();
-  }, 10000);
-}
-
-// 🌐 Express para UptimeRobot
+// 🌐 Express para Render/UptimeRobot
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -124,7 +128,8 @@ app.get('/', (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`🌍 Servidor web activo en el puerto ${port}`);
+  console.log(`🌍 Web activa en el puerto ${port}`);
 });
 
 crearBot();
+          
