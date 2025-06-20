@@ -2,10 +2,8 @@ const mineflayer = require('mineflayer');
 const express = require('express');
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
-// === CONFIGURACIÓN DEL WEBHOOK DE DISCORD ===
 const webhookURL = 'https://discord.com/api/webhooks/1385458533461393438/Sqh575Q4jnIQmZhKWwj7RFTGYHlojpcK84uFhJ2xQFRxYqoT9L4WQbrYhk5_n2t2uLSs';
 
-// Función para enviar embeds bonitos a Discord
 function enviarLogDiscordEmbed(titulo, descripcion, color = 0x57F287) {
   fetch(webhookURL, {
     method: 'POST',
@@ -21,50 +19,117 @@ function enviarLogDiscordEmbed(titulo, descripcion, color = 0x57F287) {
   }).catch(console.error);
 }
 
-// === BOT MINEFLAYER ===
-const bot = mineflayer.createBot({
-  host: 'Prueba-8qyM.aternos.me',
-  port: 23001,
-  username: 'Bot24_7',
-  version: '1.20.1'
-});
+let bot;
+let ultimoTick = null;
 
-bot.on('spawn', () => {
-  console.log('✅ Bot conectado al servidor Minecraft');
-  enviarLogDiscordEmbed('✅ Bot Conectado', 'El bot se ha conectado exitosamente al servidor.');
+function crearBot() {
+  bot = mineflayer.createBot({
+    host: 'Prueba-8qyM.aternos.me',
+    port: 23001,
+    username: 'Bot24_7',
+    version: '1.20.1'
+  });
 
-  // Saltar cada 2 segundos
-  setInterval(() => {
-    bot.setControlState('jump', true);
-    setTimeout(() => bot.setControlState('jump', false), 500);
-  }, 2000);
+  bot.on('spawn', () => {
+    console.log('✅ Bot conectado al servidor Minecraft');
+    enviarLogDiscordEmbed('✅ Bot Reconectado', 'El bot se ha conectado correctamente al servidor.');
 
-  // Enviar mensaje en el chat cada 10 minutos
-  setInterval(() => {
-    bot.chat('✅ Bot activo 24/7');
-  }, 10 * 60 * 1000);
-});
+    // Guardar tick actual
+    ultimoTick = bot.time.age;
 
-bot.on('error', (err) => {
-  console.log('❌ Error en el bot:', err);
-  enviarLogDiscordEmbed('❌ Error detectado', `**Mensaje:** ${err.message}`, 0xED4245);
-});
+    // Saltar cada 1 minuto
+    setInterval(() => {
+      bot.setControlState('jump', true);
+      setTimeout(() => bot.setControlState('jump', false), 500);
+    }, 60 * 1000);
 
-bot.on('end', () => {
-  console.log('🔄 Bot desconectado. Intentando reconectar...');
-  enviarLogDiscordEmbed('🔄 Bot desconectado', 'El bot se desconectó y se intentará reconectar en 5 segundos.', 0xFEE75C);
+    // Enviar mensaje en el chat cada 10 minutos
+    setInterval(() => {
+      bot.chat('✅ Bot activo 24/7');
+    }, 10 * 60 * 1000);
 
-  setTimeout(() => {
-    require('child_process').spawn(process.argv.shift(), process.argv, {
-      cwd: process.cwd(),
-      detached: true,
-      stdio: 'inherit'
+    // Verificar si se congela cada 1 minuto
+    setInterval(() => {
+      if (!bot || !bot.time || bot.time.age === ultimoTick) {
+        console.log('🧊 Bot congelado. Reiniciando...');
+        enviarLogDiscordEmbed(
+          '🧊 Bot congelado',
+          'El bot no respondió en el último minuto. Reiniciando...',
+          0xED4245
+        );
+        process.exit();
+      }
+      ultimoTick = bot.time.age;
+    }, 60 * 1000);
+
+    // 👋 Detectar cuando un jugador entra
+    bot.on('playerJoined', (player) => {
+      if (!player || !player.username || player.username === bot.username) return;
+
+      const nombre = player.username;
+      const total = Object.keys(bot.players).length;
+
+      bot.chat(`👋 Bienvenido, ${nombre}`);
+      bot.chat(`📊 Actualmente hay ${total} jugador(es) en el servidor`);
+
+      console.log(`👤 ${nombre} se unió al servidor.`);
+
+      enviarLogDiscordEmbed(
+        '👤 Jugador conectado',
+        `El jugador **${nombre}** entró al servidor.\n📊 Jugadores conectados: **${total}**`,
+        0x3498DB
+      );
     });
-    process.exit();
-  }, 5000);
-});
 
-// === SERVIDOR WEB PARA UPTIMEROBOT ===
+    // 👋 Detectar cuando un jugador se va
+    bot.on('playerLeft', (player) => {
+      if (!player || !player.username || player.username === bot.username) return;
+
+      const nombre = player.username;
+      const total = Object.keys(bot.players).length - 1;
+
+      console.log(`👋 ${nombre} salió del servidor.`);
+
+      enviarLogDiscordEmbed(
+        '👋 Jugador salió',
+        `El jugador **${nombre}** salió del servidor.\n📊 Jugadores conectados: **${total}**`,
+        0x95A5A6
+      );
+    });
+  });
+
+  bot.on('error', (err) => {
+    console.log('❌ Error:', err.message);
+    if (err.code === 'ECONNREFUSED' || err.message.includes('Timed out')) {
+      enviarLogDiscordEmbed(
+        '🔌 Servidor no disponible',
+        'El bot no pudo conectarse. Es posible que el servidor esté apagado.',
+        0xED4245
+      );
+    } else {
+      enviarLogDiscordEmbed('❌ Error', `**Mensaje:** ${err.message}`, 0xED4245);
+    }
+  });
+
+  bot.on('end', () => {
+    console.log('🔁 Bot desconectado. Intentando reconexión...');
+    enviarLogDiscordEmbed(
+      '🔁 Bot desconectado',
+      'El bot se desconectó. Intentando reconexión cada 10 segundos...',
+      0xFEE75C
+    );
+    esperarYReconectar();
+  });
+}
+
+function esperarYReconectar() {
+  setTimeout(() => {
+    console.log('⏳ Reintentando conexión...');
+    crearBot();
+  }, 10000);
+}
+
+// === Servidor Express para Render y UptimeRobot ===
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -81,4 +146,7 @@ app.get('/', (req, res) => {
 app.listen(port, () => {
   console.log(`🌍 Servidor web activo en puerto ${port}`);
 });
-        
+
+// Iniciar por primera vez
+crearBot();
+    
